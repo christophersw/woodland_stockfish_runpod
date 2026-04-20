@@ -1,0 +1,5 @@
+runpod>=1.6.0
+chess>=1.10.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+pydantic-settings>=2.0.0
