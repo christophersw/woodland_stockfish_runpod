@@ -18,6 +18,7 @@ pip install -r requirements.txt
 
 export DATABASE_URL="postgresql://user:pass@host/db"
 export STOCKFISH_PATH="/usr/local/bin/stockfish"
+export SYZYGY_PATH="/runpod-volume/syzygy"
 
 # RunPod SDK reads test_input.json and calls handler() without a RunPod account
 python handler.py
@@ -85,3 +86,4 @@ Both workflows can also be run manually from the Actions tab via `workflow_dispa
 | `ANALYSIS_DEPTH` | `20` (default) |
 | `ANALYSIS_THREADS` | `8` (default) |
 | `ANALYSIS_HASH_MB` | `2048` (default) |
+| `SYZYGY_PATH` | `/runpod-volume/syzygy` (default; folder containing `.rtbw` and `.rtbz` files) |

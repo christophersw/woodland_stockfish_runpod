@@ -59,6 +59,7 @@ STOCKFISH_PATH: str = os.environ.get("STOCKFISH_PATH", "/usr/games/stockfish")
 ANALYSIS_DEPTH: int = int(os.environ.get("ANALYSIS_DEPTH", "20"))
 ANALYSIS_THREADS: int = int(os.environ.get("ANALYSIS_THREADS", "8"))
 ANALYSIS_HASH_MB: int = int(os.environ.get("ANALYSIS_HASH_MB", "2048"))
+SYZYGY_PATH: str = os.environ.get("SYZYGY_PATH", "/runpod-volume/syzygy")
 DATABASE_URL: str = os.environ["DATABASE_URL"]  # Required — raises KeyError if missing
 
 # ---------------------------------------------------------------------------
@@ -170,8 +171,8 @@ def handler(job: dict) -> dict:
     runpod_job_id: str = job.get("id", "")
 
     log.info(
-        "Starting analysis: game_id=%s depth=%d threads=%d hash_mb=%d",
-        game_id, depth, threads, hash_mb,
+        "Starting analysis: game_id=%s depth=%d threads=%d hash_mb=%d syzygy=%s",
+        game_id, depth, threads, hash_mb, SYZYGY_PATH,
     )
 
     # --- Run analysis (permanent errors caught here) ---
@@ -182,6 +183,7 @@ def handler(job: dict) -> dict:
             depth=depth,
             threads=threads,
             hash_mb=hash_mb,
+            syzygy_path=SYZYGY_PATH,
         )
     except Exception as exc:
         log.error("Analysis failed for game_id=%s: %s", game_id, exc, exc_info=True)

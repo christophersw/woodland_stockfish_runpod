@@ -188,6 +188,7 @@ def analyze_pgn(
     depth: int = 20,
     threads: int = 1,
     hash_mb: int = 256,
+    syzygy_path: str | None = None,
     move_callback: "callable[[int, int, str], None] | None" = None,
 ) -> GameResult:
     """Analyze a full game PGN and return per-move results plus player stats.
@@ -202,6 +203,8 @@ def analyze_pgn(
     total_moves = sum(1 for _ in game.mainline_moves())
 
     engine_options: dict = {"Threads": str(threads), "Hash": str(hash_mb)}
+    if syzygy_path:
+        engine_options["SyzygyPath"] = syzygy_path
     limit = chess.engine.Limit(depth=depth)
 
     move_results: list[MoveResult] = []
@@ -357,6 +360,7 @@ def analyse_game(
     depth: int = 20,
     threads: int = 1,
     hash_mb: int = 256,
+    syzygy_path: str | None = None,
 ) -> GameResult:
     """Analyse a pre-parsed chess.pgn.Game object.
 
@@ -373,4 +377,5 @@ def analyse_game(
         depth=depth,
         threads=threads,
         hash_mb=hash_mb,
+        syzygy_path=syzygy_path,
     )
