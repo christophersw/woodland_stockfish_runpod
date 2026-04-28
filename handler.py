@@ -26,8 +26,10 @@ Returns:
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 
 import runpod
@@ -43,6 +45,7 @@ from stockfish_pipeline.storage.models import (
     GameAnalysis,
     GameParticipant,
     MoveAnalysis,
+    SystemEvent,
 )
 
 logging.basicConfig(
@@ -67,6 +70,35 @@ DATABASE_URL: str = os.environ["DATABASE_URL"]  # Required — raises KeyError i
 # ---------------------------------------------------------------------------
 _engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 _SessionLocal = sessionmaker(bind=_engine, autoflush=False, autocommit=False)
+
+
+def _write_system_event(
+    session,
+    *,
+    status: str,
+    started_at: datetime,
+    duration_seconds: float,
+    game_id: str,
+    runpod_job_id: str,
+    details: dict | None = None,
+    error_message: str | None = None,
+) -> None:
+    event = SystemEvent(
+        event_type="stockfish",
+        status=status,
+        started_at=started_at,
+        completed_at=datetime.now(timezone.utc),
+        duration_seconds=duration_seconds,
+        details=json.dumps(
+            {
+                "game_id": game_id,
+                "runpod_job_id": runpod_job_id,
+                **(details or {}),
+            }
+        ),
+        error_message=error_message,
+    )
+    session.add(event)
 
 
 def _save_analysis(session, game_id: str, result) -> None:
@@ -169,6 +201,8 @@ def handler(job: dict) -> dict:
     threads: int = int(job_input.get("threads", ANALYSIS_THREADS))
     hash_mb: int = int(job_input.get("hash_mb", ANALYSIS_HASH_MB))
     runpod_job_id: str = job.get("id", "")
+    started_at = datetime.now(timezone.utc)
+    started_clock = time.perf_counter()
 
     log.info(
         "Starting analysis: game_id=%s depth=%d threads=%d hash_mb=%d syzygy=%s",
@@ -187,6 +221,18 @@ def handler(job: dict) -> dict:
         )
     except Exception as exc:
         log.error("Analysis failed for game_id=%s: %s", game_id, exc, exc_info=True)
+        duration_seconds = time.perf_counter() - started_clock
+        with _SessionLocal() as session:
+            _write_system_event(
+                session,
+                status="failed",
+                started_at=started_at,
+                duration_seconds=duration_seconds,
+                game_id=game_id,
+                runpod_job_id=runpod_job_id,
+                error_message=str(exc),
+            )
+            session.commit()
         return {"game_id": game_id, "status": "error", "error": str(exc)}
 
     # --- Write to DB (transient errors re-raised for RunPod retry) ---
@@ -194,11 +240,37 @@ def handler(job: dict) -> dict:
         with _SessionLocal() as session:
             _save_analysis(session, game_id, result)
             _mark_job_completed(session, game_id, runpod_job_id)
+            duration_seconds = time.perf_counter() - started_clock
+            _write_system_event(
+                session,
+                status="completed",
+                started_at=started_at,
+                duration_seconds=duration_seconds,
+                game_id=game_id,
+                runpod_job_id=runpod_job_id,
+                details={
+                    "moves_analysed": len(result.moves),
+                    "accuracy_white": result.white_stats.accuracy,
+                    "accuracy_black": result.black_stats.accuracy,
+                },
+            )
             session.commit()
     except sqlalchemy.exc.OperationalError:
         raise  # Transient — let RunPod retry
     except Exception as exc:
         log.error("DB write failed for game_id=%s: %s", game_id, exc, exc_info=True)
+        duration_seconds = time.perf_counter() - started_clock
+        with _SessionLocal() as session:
+            _write_system_event(
+                session,
+                status="failed",
+                started_at=started_at,
+                duration_seconds=duration_seconds,
+                game_id=game_id,
+                runpod_job_id=runpod_job_id,
+                error_message=str(exc),
+            )
+            session.commit()
         return {"game_id": game_id, "status": "error", "error": str(exc)}
 
     log.info(
